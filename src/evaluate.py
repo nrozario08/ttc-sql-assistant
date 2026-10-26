@@ -1,6 +1,8 @@
 """Run the benchmark and score the assistant.
 
-    python src/evaluate.py --models claude-opus-5-5 claude-haiku-5-5 --variants baseline full
+    python src/evaluate.py --models gemini-3.8-flash gemini-3.5-flash-lite --variants baseline full
+
+Model names starting with "gemini" use GEMINI_API_KEY; "claude-..." models use ANTHROPIC_API_KEY.
 
 Every model reply is saved in eval/cache/, so a second run (or anyone else cloning the repo)
 reproduces the same results without an API key or any cost. Use --refresh to ask the model again.
@@ -23,10 +25,13 @@ QUESTIONS_PATH = os.path.join("eval", "questions.json")
 CACHE_DIR = os.path.join("eval", "cache")
 RESULTS_DIR = "results"
 
-# US dollars per million tokens (input, output), from the published price list
+# US dollars per million tokens (input, output), from the published paid-tier price lists.
+# Gemini's free tier costs nothing, so these show what the same run would cost on the paid tier.
 PRICES = {
     "claude-opus-5-5": (4.00, 20.00),
     "claude-haiku-5-5": (0.10, 0.50),
+    "gemini-3.8-flash": (0.75, 3.75),
+    "gemini-3.5-flash-lite": (0.30, 2.50),
 }
 
 
@@ -179,7 +184,8 @@ def main():
             cache = os.path.join(CACHE_DIR, f"{model}__{variant}")
             print(f"running {model} / {variant} ...")
             all_results[(model, variant)] = run_variant(
-                questions, make_client, con, model, variant, cache_dir=cache, refresh=args.refresh)
+                questions, lambda: make_client(model), con, model, variant,
+                cache_dir=cache, refresh=args.refresh)
 
     os.makedirs(RESULTS_DIR, exist_ok=True)
     with open(os.path.join(RESULTS_DIR, "results.json"), "w") as f:

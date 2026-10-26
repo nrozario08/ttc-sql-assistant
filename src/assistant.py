@@ -47,7 +47,11 @@ def reply_text(response):
     return "".join(b.text for b in response.content if b.type == "text")
 
 
-def make_client():
+def make_client(model=DEFAULT_MODEL):
+    """Gemini models go through the Google SDK, everything else through Anthropic's."""
+    if model.startswith("gemini"):
+        from gemini_client import GeminiClient
+        return GeminiClient()
     import anthropic
     return anthropic.Anthropic()
 
@@ -123,7 +127,7 @@ def main():
     args = parser.parse_args()
 
     con = connect_readonly(DB_PATH)
-    answer = ask(args.question, make_client(), con, model=args.model,
+    answer = ask(args.question, make_client(args.model), con, model=args.model,
                  variant=args.variant, retry=not args.no_retry)
     print_answer(answer)
 
