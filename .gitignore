@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.env
+
+# raw downloads are big and can be re-fetched with src/download_data.py
+data/raw/
+# the sqlite file gets rebuilt by src/build_db.py
+*.db
