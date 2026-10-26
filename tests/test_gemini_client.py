@@ -48,3 +48,21 @@ def test_make_client_picks_the_sdk_from_the_model_name(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "not-a-real-key")
     assert type(make_client("gemini-3.8-flash")).__name__ == "GeminiClient"
     assert type(make_client("claude-haiku-5-5")).__module__.startswith("anthropic")
+
+
+def test_busy_server_is_retried_then_succeeds(monkeypatch):
+    import gemini_client
+    from google.genai import errors
+    monkeypatch.setattr(gemini_client.time, "sleep", lambda s: None)
+    calls = []
+
+    class FlakyModels:
+        def generate_content(self, model, contents, config):
+            calls.append(1)
+            if len(calls) < 3:
+                raise errors.ServerError(503, {"error": {"message": "high demand"}})
+            return "ok"
+
+    client = GeminiClient.__new__(GeminiClient)
+    client._client = SimpleNamespace(models=FlakyModels())
+    assert client._generate_with_retries("m", [], None) == "ok" and len(calls) == 3

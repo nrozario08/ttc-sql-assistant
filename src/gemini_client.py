@@ -4,6 +4,7 @@ assistant.ask() only needs client.messages.create(...) to return text blocks and
 so this wraps the google-genai SDK in that shape. The API key is read from the
 GEMINI_API_KEY environment variable.
 """
+import time
 from types import SimpleNamespace
 
 
@@ -21,6 +22,20 @@ class GeminiClient:
         self._client = genai.Client()
         self.messages = SimpleNamespace(create=self._create)
 
+    def _generate_with_retries(self, model, contents, config, attempts=8):
+        """Busy-server (503) and rate-limit (429) errors are temporary, so wait and try again."""
+        from google.genai import errors
+        for attempt in range(attempts):
+            try:
+                return self._client.models.generate_content(model=model, contents=contents, config=config)
+            except (errors.ServerError, errors.ClientError) as e:
+                temporary = isinstance(e, errors.ServerError) or getattr(e, "code", None) == 429
+                if not temporary or attempt == attempts - 1:
+                    raise
+                wait = min(10 * 2 ** attempt, 120)
+                print(f"  gemini busy ({e.code}), retrying in {wait}s", flush=True)
+                time.sleep(wait)
+
     def _create(self, model, system, messages, max_tokens=16000, **_ignored):
         # Gemini calls the assistant's turns "model"
         contents = [
@@ -30,15 +45,12 @@ class GeminiClient:
             )
             for m in messages
         ]
-        response = self._client.models.generate_content(
-            model=model,
-            contents=contents,
-            config=self._genai.types.GenerateContentConfig(
-                system_instruction=system,
-                max_output_tokens=max_tokens,
-                temperature=0,
-            ),
+        config = self._genai.types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_tokens,
+            temperature=0,
         )
+        response = self._generate_with_retries(model, contents, config)
         meta = response.usage_metadata
         # thinking tokens are billed as output
         output = (meta.candidates_token_count or 0) + (meta.thoughts_token_count or 0)
